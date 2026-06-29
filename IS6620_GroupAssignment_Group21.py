@@ -301,42 +301,6 @@ with st.sidebar:
     else:
         st.warning("Qdrant Vector DB &#8212; Not configured")
 
-    with st.expander(
-        "Advanced Settings",
-        expanded=not (deepseek_configured and qdrant_configured),
-    ):
-        st.markdown("**DeepSeek API**")
-        st.text_input("API Key", type="password", key="deepseek_api_key")
-        if st.button("Test DeepSeek Connection"):
-            test_result = call_deepseek(
-                [{"role": "user", "content": "Say test ok in one word."}]
-            )
-            if test_result.startswith("ERROR"):
-                st.error(test_result)
-            else:
-                st.success("Connection successful!")
-
-        st.divider()
-        st.markdown("**Qdrant Vector DB**")
-        st.text_input(
-            "Cluster URL",
-            placeholder="https://xxx.cloud.qdrant.io",
-            key="qdrant_url",
-        )
-        st.text_input("API Key", type="password", key="qdrant_api_key")
-        if st.button("Test Qdrant Connection"):
-            from qdrant_client import QdrantClient
-
-            try:
-                test_client = QdrantClient(
-                    url=st.session_state.qdrant_url,
-                    api_key=st.session_state.qdrant_api_key,
-                )
-                test_client.get_collections()
-                st.success("Connection successful!")
-            except Exception as e:
-                st.error(f"Connection failed: {e}")
-
     st.divider()
     st.markdown("### Product & Content")
 
