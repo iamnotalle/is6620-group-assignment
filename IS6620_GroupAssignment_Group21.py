@@ -394,65 +394,74 @@ with col1:
 
                     # Step 5: Critic Agent (max 2 rounds)
                     st.info("正在审核内容（评审 Agent）...")
-                    critic_prompt = (
-                        "You are a strict marketing content reviewer. "
-                        "You MUST find at least one concrete improvement per review round. "
-                        "Do NOT approve unless the content is genuinely excellent (score >= 8/10).\n\n"
-                        "Content to review:\n"
-                        f"{draft_output}\n\n"
-                        "Check:\n"
-                        "1. Any competitor brand names NOT replaced with [Competitor Name]?\n"
-                        "2. Is the tone exciting and appealing to keyboard enthusiasts?\n"
-                        "3. Any grammar issues, typos, or awkward phrasing?\n"
-                        "4. Does the content fully address the user request?\n"
-                        "5. Is the length appropriate (Blog: 300-600 words, EDM: 100-200 words)?\n\n"
-                        'Output ONLY valid JSON, no markdown code fences:\n{"approved": true/false, "feedback": "...", "score": 1-10, "issues": ["..."]}'
-                    )
-
                     max_critic_rounds = 2
                     current_draft = draft_output
                     st.session_state.original_draft = draft_output  # 保存原始草稿
                     st.session_state.critic_feedbacks = []  # 保存每轮审核记录
-                    for round_num in range(max_critic_rounds):
+
+                    for round_i in range(max_critic_rounds):
+                        # 每轮重新构造 critic prompt，包含最新草稿
+                        critic_prompt = (
+                            "You are a strict marketing content reviewer. "
+                            "You MUST find at least one concrete improvement per review round. "
+                            "Do NOT approve unless the content is genuinely excellent (score >= 8/10).\n\n"
+                            f"Content to review (Round {round_i+1}):\n{current_draft}\n\n"
+                            "Check:\n"
+                            "1. Any competitor brand names NOT replaced with [Competitor Name]?\n"
+                            "2. Is the tone exciting and appealing to keyboard enthusiasts?\n"
+                            "3. Any grammar issues, typos, or awkward phrasing?\n"
+                            "4. Does the content fully address the user request?\n"
+                            "5. Is the length appropriate (Blog: 300-600 words, EDM: 100-200 words)?\n\n"
+                            'Output ONLY valid JSON, no markdown code fences:\n'
+                            '{"approved": true/false, "feedback": "...", "score": 1-10, "issues": ["..."]}'
+                        )
                         critic_messages = [
                             {"role": "system", "content": critic_prompt},
-                            {
-                                "role": "user",
-                                "content": f"Please review this content (Round {round_num+1}):\n\n{current_draft}",
-                            },
+                            {"role": "user", "content": f"Please review this content (Round {round_i+1}):\n\n{current_draft}"},
                         ]
                         critic_response = call_deepseek(critic_messages, temperature=0.2)
 
                         try:
                             json_match = re.search(r"\{.*\}", critic_response, re.DOTALL)
-                            if json_match:
-                                critic_result = json.loads(json_match.group())
-                                if critic_result.get("approved"):
-                                    st.success(f"已通过（第 {round_num+1} 轮）")
-                                    break
-                                else:
-                                    st.warning(f"需要修改（第 {round_num+1} 轮）")
-                                    # 记录本轮反馈
-                                    feedback_entry = {"round": round_num+1, "feedback": feedback, "before": current_draft, "after": ""}
-                                    st.session_state.critic_feedbacks.append(feedback_entry)
-                                    feedback = critic_result.get("feedback", "")
-                                    refine_messages = drafter_messages + [
-                                        {"role": "assistant", "content": current_draft},
-                                        {
-                                            "role": "user",
-                                            "content": f"Please revise based on this feedback: {feedback}",
-                                        },
-                                    ]
-                                    st.warning(f"需要修改（第 {round_num+1} 轮）")
-                                    # 记录本轮反馈
-                                    feedback_entry = {"round": round_num+1, "feedback": feedback, "before": current_draft, "after": ""}
-                                    st.session_state.critic_feedbacks.append(feedback_entry)
-                                    current_draft = filter_think_tags(current_draft)
-                            else:
+                            if not json_match:
                                 st.warning("无法解析评审响应，跳过审核。")
                                 break
-                        except json.JSONDecodeError:
-                            st.warning("评审响应不是有效的 JSON，跳过审核。")
+                            critic_result = json.loads(json_match.group())
+                            approved = critic_result.get("approved", False)
+                            score = critic_result.get("score", 0)
+                            feedback = critic_result.get("feedback", "")
+
+                            if approved and score >= 8:
+                                st.success(f"✅ 已通过（第 {round_i+1} 轮，评分 {score}/10）")
+                                break
+
+                            # 未通过：记录反馈，根据反馈重新生成草稿
+                            st.warning(f"⚠️ 需要修改（第 {round_i+1} 轮，评分 {score}/10）")
+                            st.write(f"评审意见：{feedback}")
+
+                            # 记录本轮反馈
+                            feedback_entry = {
+                                "round": round_i + 1,
+                                "feedback": feedback,
+                                "before": current_draft,
+                                "after": "",
+                            }
+                            st.session_state.critic_feedbacks.append(feedback_entry)
+
+                            # 根据反馈重新生成草稿
+                            refine_messages = drafter_messages + [
+                                {"role": "assistant", "content": current_draft},
+                                {"role": "user", "content": f"Please revise the content based on this feedback: {feedback}"},
+                            ]
+                            st.info("正在根据审核意见重新生成...")
+                            revised = call_deepseek(refine_messages, temperature=0.7)
+                            revised = filter_think_tags(revised)
+                            # 更新 after 字段
+                            st.session_state.critic_feedbacks[-1]["after"] = revised
+                            current_draft = revised
+
+                        except (json.JSONDecodeError, Exception) as e:
+                            st.warning(f"评审响应解析失败：{e}，跳过审核。")
                             break
 
                     # Step 6: Final processing
