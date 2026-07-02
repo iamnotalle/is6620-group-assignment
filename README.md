@@ -1,97 +1,125 @@
-# AI Keyboard Marketing Studio
+# AI 键盘出海营销内容生成器
 
-An AI marketing content workflow for global keyboard brands.
+这是一个面向产品经理面试展示的 Streamlit 项目，用来模拟“键盘品牌出海营销团队”的真实内容生产流程。
 
-This Streamlit app is designed as a product-manager portfolio project. It helps a marketing operator turn a rough campaign brief into English marketing copy, then reviews the output with a lightweight content quality scorecard.
+用户输入产品名称、产品特性和营销需求后，系统会结合 Qdrant Cloud 中的参考案例与知识库，调用 DeepSeek 生成英文 Blog 或 EDM 文案，并由审核 Agent 给出固定维度的质量评估和迭代建议。
 
-## Product Positioning
+## 产品定位
 
-**Target user:** overseas marketing operator for a keyboard brand
-**User problem:** content teams need fast first drafts, but they also need confidence that the copy is on-brand, channel-fit, and safe to publish.
-**Product goal:** make the AI workflow visible and controllable instead of returning a black-box generation result.
+**目标用户：** 键盘品牌的海外营销运营人员。
 
-## Core Workflow
+**用户问题：** 营销团队需要快速产出英文内容初稿，但不能只依赖黑盒生成；他们还需要确认文案是否符合产品事实、品牌安全、合规要求和转化目标。
 
-1. **Campaign Brief**
-   - Product, channel, audience, market, goal, tone, core features, required points, and blocked terms.
+**产品目标：** 把 AI 内容生成变成一个可控、可解释、可迭代的工作流，而不是只返回一段文案。
 
-2. **RAG Retrieval**
-   - Pulls reference cases from Qdrant Cloud when configured.
-   - Falls back to a built-in demo knowledge base when Qdrant is not configured.
+## 核心能力
 
-3. **Drafter Agent**
-   - Uses DeepSeek to generate English marketing content.
-   - Supports Blog and EDM formats, matching the current reference case library.
+1. **产品 Brief 输入**
+   - 支持填写产品名称、产品特性、内容类型、营销目标、文案语气、内容长度、内容结构和禁用词。
+   - 当前保留 Blog 和 EDM 两种内容类型，因为 Qdrant 案例库中这两类案例最完整。
 
-4. **Quality Review**
-   - Scores the draft on brief match, brand safety, compliance risk, fact consistency, CTA clarity, content depth, and evidence use.
-   - Returns concrete iteration suggestions instead of only showing a final score.
+2. **RAG 检索**
+   - 从 Qdrant Cloud 检索 Blog / EDM 参考案例。
+   - 同时读取产品事实、品牌规范、合规规则、用户画像和内容结构规则。
+   - 如果检索或 embedding 失败，会使用内置参考库兜底，降低演示风险。
 
-5. **PM Notes**
-   - Explains user problem, product decision, and next success metrics.
+3. **内容生成 Agent**
+   - 使用 DeepSeek 生成英文营销内容。
+   - 根据用户选择的目标、语气、结构和产品特性生成可直接阅读的 Blog 或 EDM 初稿。
+   - 对 Blog 和 EDM 做不同约束，例如 EDM 允许退订提示，Blog 不加入邮件页脚。
 
-## Why This Is a PM-Oriented AI Project
+4. **审核 Agent**
+   - 审核维度固定展示，不让用户自行选择，避免增加操作负担。
+   - 当前固定维度包括：
+     - 需求匹配
+     - 品牌安全
+     - 合规风险
+     - 事实一致性
+     - CTA 清晰度
+     - 内容完整度
+     - 参考依据
+   - 审核 Agent 会输出评分、问题判断和具体迭代建议。
+   - 评分用于判断是否需要继续修改，不代表真实投放效果预测。
 
-- It starts from a real user workflow rather than a model demo.
-- It structures vague user needs into a campaign brief.
-- It exposes retrieval evidence so users can understand why the content was generated.
-- It includes a review and iteration loop, which is essential for AI content products.
-- It supports an interviewer-friendly live demo without exposing API keys in the UI.
+5. **迭代闭环**
+   - 生成结果旁边直接展示审核分数和最低分维度。
+   - 系统给出可执行的改写方向，帮助 PM 说明“如何基于评估继续迭代产品”。
 
-## Interview Demo Mode
+## 为什么这是产品经理项目
 
-For an interview, do **not** hardcode API keys in the GitHub repo.
+- 不是单纯调用大模型，而是围绕真实用户任务设计流程。
+- 从“营销人员如何写出可发布内容”出发，而不是从技术展示出发。
+- 把 RAG、生成 Agent、审核 Agent、合规审核和迭代建议串成完整闭环。
+- 对面试官隐藏 API 配置，让对方能直接体验产品。
+- 用固定审核维度降低用户选择成本，体现产品设计取舍。
 
-Use Streamlit Secrets instead:
+## 技术结构
+
+- 前端与产品界面：Streamlit
+- 内容生成：DeepSeek API
+- RAG 知识库：Qdrant Cloud
+- 检索内容：
+  - Blog / EDM 历史案例
+  - KeyX Pro 产品事实
+  - 功能到用户收益映射
+  - 用户画像与购买阻力
+  - 品牌语气与术语规范
+  - 合规规则与审核规则
+
+## Streamlit Secrets 配置
+
+不要把真实 API key 写进 GitHub。
+
+本地测试或 Streamlit Cloud 部署时，在 Secrets 中配置：
 
 ```toml
 INTERVIEW_MODE = true
 DEEPSEEK_API_KEY = "your-deepseek-api-key"
 
-# Optional. If omitted, the app uses demo reference cases.
 QDRANT_URL = "your-qdrant-cluster-url"
 QDRANT_API_KEY = "your-qdrant-api-key"
 ```
 
-When `INTERVIEW_MODE = true` and `DEEPSEEK_API_KEY` exists:
+当 `INTERVIEW_MODE = true` 且 `DEEPSEEK_API_KEY` 存在时：
 
-- the app automatically uses Live AI;
-- the API input fields are hidden from the sidebar;
-- the interviewer can directly generate and review content.
+- 系统自动使用真实 AI 生成；
+- 页面不会展示 API 输入框；
+- 面试官可以直接输入需求并体验生成、审核和下载。
 
-If the key is missing, the app automatically falls back to Demo Mode.
+如果 API key 缺失，系统会自动进入 Demo Mode，避免页面不可用。
 
-## Local Setup
+## 本地运行
 
 ```bash
 pip install -r requirements.txt
 streamlit run IS6620_GroupAssignment_Group21.py
 ```
 
-For local live testing:
+本地真实 API 测试：
 
-1. Copy `.streamlit/secrets.example.toml` to `.streamlit/secrets.toml`.
-2. Fill in your actual API keys.
-3. Keep `.streamlit/secrets.toml` private. It is already ignored by `.gitignore`.
+1. 复制 `.streamlit/secrets.example.toml` 为 `.streamlit/secrets.toml`。
+2. 填入真实的 DeepSeek 和 Qdrant 配置。
+3. 不要提交 `.streamlit/secrets.toml`，该文件已被 `.gitignore` 忽略。
 
-## Streamlit Cloud Deployment
+## Streamlit Cloud 部署
 
-1. Push this repo to GitHub.
-2. Open [Streamlit Community Cloud](https://share.streamlit.io).
-3. Create a new app from this repository.
-4. Set the main file to:
+1. 将代码推送到 GitHub。
+2. 打开 Streamlit Community Cloud。
+3. 选择该 GitHub 仓库创建 app。
+4. Main file 设置为：
 
 ```text
 IS6620_GroupAssignment_Group21.py
 ```
 
-5. Add the Secrets shown above in Streamlit Cloud settings.
-6. Deploy and send the app link to the interviewer.
+5. 在 Streamlit Cloud 的 Secrets 页面填入上面的配置。
+6. 部署后将链接发给面试官体验。
 
-## Suggested Interview Talking Points
+## 面试讲解重点
 
-- I redesigned the app around the marketing operator's task flow.
-- I separated live AI configuration from the user interface so the interviewer can experience it directly.
-- I added Demo Mode as a fallback to reduce demo risk.
-- I made the AI output reviewable with a scorecard and iteration plan.
-- I avoided committing API keys and used Streamlit Secrets for production-like deployment.
+- 我把原来的“生成文案工具”改成了“AI 营销内容工作流产品”。
+- 用户不是来调参数的，所以审核维度不让用户选，而是固定输出。
+- Blog 和 EDM 是当前案例库最完整的场景，所以先聚焦这两个内容类型。
+- RAG 不只是拿案例，也包含产品事实、合规规则和品牌规范。
+- 审核 Agent 不是预测投放效果，而是帮助判断内容是否可发布、是否需要继续迭代。
+- 后续可以加入真实内容表现数据，把审核建议和实际转化率、打开率、点击率做闭环验证。
