@@ -145,7 +145,8 @@ def init_state() -> None:
         "deepseek_api_key": read_secret("DEEPSEEK_API_KEY"),
         "qdrant_url": read_secret("QDRANT_URL"),
         "qdrant_api_key": read_secret("QDRANT_API_KEY"),
-        "interview_mode": read_bool_secret("INTERVIEW_MODE", False),
+        "interview_mode": read_bool_secret("INTERVIEW_MODE", True),
+        "show_api_settings": read_bool_secret("SHOW_API_SETTINGS", False),
         "history": [],
     }
     for key, value in defaults.items():
@@ -819,13 +820,9 @@ def save_history(brief: Brief, content: str, score: int, status: str) -> None:
 
 with st.sidebar:
     has_live_key = bool(st.session_state.deepseek_api_key)
-    interview_mode = bool(st.session_state.interview_mode)
+    show_api_settings = bool(st.session_state.show_api_settings)
 
-    if interview_mode and has_live_key:
-        demo_mode = False
-    elif interview_mode:
-        demo_mode = True
-    else:
+    if show_api_settings:
         demo_mode = st.toggle("演示模式", value=not has_live_key, label_visibility="collapsed")
 
         with st.expander("API 设置", expanded=not demo_mode):
@@ -845,6 +842,8 @@ with st.sidebar:
                 value=st.session_state.qdrant_api_key,
                 type="password",
             )
+    else:
+        demo_mode = not has_live_key
 
     st.subheader("产品与内容")
     product_name = st.text_input("产品名称", value="KeyX Pro")

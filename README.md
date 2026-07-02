@@ -68,25 +68,27 @@
 
 ## Streamlit Secrets 配置
 
-不要把真实 API key 写进 GitHub。
+不要把真实 API key 写进 GitHub，也不要让面试官或访问者填写 key。
 
-本地测试或 Streamlit Cloud 部署时，在 Secrets 中配置：
+正确做法是：由 app owner 在 Streamlit Cloud 的 Secrets 后台配置一次，访问者打开页面后直接体验产品。
 
 ```toml
 INTERVIEW_MODE = true
+SHOW_API_SETTINGS = false
 DEEPSEEK_API_KEY = "your-deepseek-api-key"
 
 QDRANT_URL = "your-qdrant-cluster-url"
 QDRANT_API_KEY = "your-qdrant-api-key"
 ```
 
-当 `INTERVIEW_MODE = true` 且 `DEEPSEEK_API_KEY` 存在时：
+当 `SHOW_API_SETTINGS = false` 时：
 
-- 系统自动使用真实 AI 生成；
 - 页面不会展示 API 输入框；
-- 面试官可以直接输入需求并体验生成、审核和下载。
+- 访问者不需要、也不能在页面里填写 key；
+- 如果 `DEEPSEEK_API_KEY` 存在，系统自动使用真实 AI 生成；
+- 如果 key 缺失，系统自动进入 Demo Mode，避免页面不可用。
 
-如果 API key 缺失，系统会自动进入 Demo Mode，避免页面不可用。
+只有本地调试时才建议临时设置 `SHOW_API_SETTINGS = true`，用于手动检查 API 配置。
 
 ## 本地运行
 
