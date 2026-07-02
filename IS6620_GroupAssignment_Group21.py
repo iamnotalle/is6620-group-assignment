@@ -3,7 +3,6 @@ import os
 import re
 import time
 from dataclasses import dataclass
-from html import escape
 from typing import Any
 
 import streamlit as st
@@ -77,6 +76,8 @@ EVALUATION_DIMENSIONS = [
     "内容完整度",
     "参考依据",
 ]
+
+OUTPUT_VIEWS = ["生成内容", "引用案例", "审核维度", "综合评分"]
 
 COMPLIANCE_RISK_PATTERNS = {
     "绝对化表达": [
@@ -196,38 +197,6 @@ st.markdown(
         line-height: 1.6;
         margin-top: 0.55rem;
         max-width: 920px;
-    }
-    .summary-row {
-        display: grid;
-        grid-template-columns: repeat(3, minmax(0, 1fr));
-        gap: 0.75rem;
-        margin: 0.35rem 0 0.9rem 0;
-    }
-    .summary-card {
-        background: #ffffff;
-        border: 1px solid #e6e8ec;
-        border-radius: 8px;
-        padding: 0.72rem 0.85rem;
-        min-height: 82px;
-    }
-    .summary-label {
-        color: #6b7280;
-        font-size: 0.78rem;
-        line-height: 1.2;
-        margin-bottom: 0.3rem;
-    }
-    .summary-value {
-        color: #111827;
-        font-weight: 720;
-        font-size: 1.22rem;
-        line-height: 1.25;
-        white-space: nowrap;
-    }
-    .summary-note {
-        color: #6b7280;
-        font-size: 0.75rem;
-        line-height: 1.25;
-        margin-top: 0.2rem;
     }
     .flow-step {
         background: #ffffff;
@@ -815,30 +784,119 @@ def build_iteration_plan(scorecard: dict[str, dict[str, Any]]) -> list[str]:
     return [f"{name}: {detail['suggestion']}" for name, detail in sorted_items[:3]]
 
 
-def render_output_summary(result: dict[str, Any] | None) -> None:
-    if result:
-        score, status_label = summarize_score(result["scorecard"])
-        cards = [
-            ("引用案例", f"{len(result['cases'])} 条", result.get("retrieval_source", "参考库")),
-            ("审核维度", f"{len(result['scorecard'])} 项", result.get("reviewer_source", "审核 Agent")),
-            ("综合评分", f"{score}/10", status_label),
-        ]
-    else:
-        cards = [
-            ("引用案例", "待检索", "生成后显示"),
-            ("审核维度", f"{len(EVALUATION_DIMENSIONS)} 项", "固定审核 Agent"),
-            ("综合评分", "待评分", "生成后显示"),
-        ]
+def select_output_view() -> str:
+    if st.session_state.get("output_view") not in OUTPUT_VIEWS:
+        st.session_state.output_view = OUTPUT_VIEWS[0]
 
-    card_html = "".join(
-        '<div class="summary-card">'
-        f'<div class="summary-label">{escape(label)}</div>'
-        f'<div class="summary-value">{escape(value)}</div>'
-        f'<div class="summary-note">{escape(note)}</div>'
-        "</div>"
-        for label, value, note in cards
+    if hasattr(st, "segmented_control"):
+        selected = st.segmented_control(
+            "输出视图",
+            OUTPUT_VIEWS,
+            key="output_view",
+            label_visibility="collapsed",
+        )
+        return selected or OUTPUT_VIEWS[0]
+
+    selected = st.radio(
+        "输出视图",
+        OUTPUT_VIEWS,
+        key="output_view",
+        horizontal=True,
+        label_visibility="collapsed",
     )
-    st.markdown(f'<div class="summary-row">{card_html}</div>', unsafe_allow_html=True)
+    return selected or OUTPUT_VIEWS[0]
+
+
+def render_empty_output(view: str) -> None:
+    if view == "生成内容":
+        st.info("填写左侧 Brief 后，点击“生成营销内容”，这里会显示可直接给面试官体验的生成结果。")
+    elif view == "引用案例":
+        st.info("生成后显示本次从 Qdrant / 案例库检索到的参考案例。")
+    elif view == "审核维度":
+        st.caption("审核维度由系统固定，不需要用户选择。")
+        for dimension in EVALUATION_DIMENSIONS:
+            st.write(f"- {dimension}")
+    elif view == "综合评分":
+        st.info("生成后显示 Review Agent 的综合评分、结论和优先迭代建议。")
+
+
+def render_generated_content(result: dict[str, Any]) -> None:
+    brief = result["brief"]
+    st.caption(
+        f"生成来源：{result.get('drafter_source', '内容生成 Agent')}；"
+        f"内容类型：{brief.content_type}"
+    )
+    st.markdown(result["content"])
+    st.download_button(
+        "下载内容",
+        data=result["content"],
+        file_name=f"{brief.product_name}_{brief.content_type}.txt",
+        mime="text/plain",
+        use_container_width=True,
+        key="download_generated_content",
+    )
+
+
+def render_reference_cases(result: dict[str, Any]) -> None:
+    cases = result.get("cases", [])
+    st.caption(f"参考来源：{result.get('retrieval_source', '参考库')}")
+    if not cases:
+        st.info("本次没有检索到可用案例，生成内容使用了产品 Brief 和系统规则。")
+        return
+
+    for index, case in enumerate(cases, start=1):
+        title = case.get("title", "参考案例")
+        score = case.get("score", 0)
+        with st.expander(f"{index}. {title} · 匹配度 {score}", expanded=index == 1):
+            st.write(case.get("content", ""))
+
+
+def render_review_dimensions(result: dict[str, Any]) -> None:
+    scorecard = result.get("scorecard", {})
+    st.caption(
+        f"由 {result.get('reviewer_source', '审核 Agent')} 给出；"
+        "维度固定，避免用户为了拿高分手动筛选审核项。"
+    )
+    for name in EVALUATION_DIMENSIONS:
+        detail = scorecard.get(name)
+        if not detail:
+            continue
+        st.progress(detail["score"] / 10, text=f"{name}: {detail['score']}/10")
+        st.caption(f"问题：{detail['issue']}")
+        st.caption(f"建议：{detail['suggestion']}")
+
+
+def render_overall_score(result: dict[str, Any]) -> None:
+    score = result.get("score")
+    status_label = result.get("status")
+    if score is None or status_label is None:
+        score, status_label = summarize_score(result.get("scorecard", {}))
+
+    metric_col1, metric_col2 = st.columns(2)
+    metric_col1.metric("综合评分", f"{score}/10")
+    metric_col2.metric("审核结论", status_label)
+
+    iteration_plan = result.get("iteration_plan") or build_iteration_plan(result.get("scorecard", {}))
+    if iteration_plan:
+        st.markdown("**优先迭代建议**")
+        for index, suggestion in enumerate(iteration_plan, start=1):
+            st.write(f"{index}. {suggestion}")
+
+
+def render_output_panel(result: dict[str, Any] | None) -> None:
+    selected_view = select_output_view()
+    if not result:
+        render_empty_output(selected_view)
+        return
+
+    if selected_view == "生成内容":
+        render_generated_content(result)
+    elif selected_view == "引用案例":
+        render_reference_cases(result)
+    elif selected_view == "审核维度":
+        render_review_dimensions(result)
+    elif selected_view == "综合评分":
+        render_overall_score(result)
 
 
 def save_history(brief: Brief, content: str, score: int, status: str) -> None:
@@ -1039,43 +1097,7 @@ with left:
 with right:
     st.subheader("输出")
     result = st.session_state.get("result")
-    render_output_summary(result)
-    if not result:
-        st.info("生成的内容将显示在此处。")
-    else:
-        visible_scorecard = result["scorecard"]
-        st.caption(f"由 {result.get('reviewer_source', '审核 Agent')} 给出，用于判断是否需要继续迭代。")
-        for name, detail in visible_scorecard.items():
-            st.progress(detail["score"] / 10, text=f"{name}: {detail['score']}/10")
-            st.caption(detail["issue"])
-
-        iteration_plan = build_iteration_plan(visible_scorecard)
-        if iteration_plan:
-            with st.expander("迭代建议", expanded=True):
-                for index, suggestion in enumerate(iteration_plan, start=1):
-                    st.write(f"{index}. {suggestion}")
-
-        st.divider()
-        st.markdown(result["content"])
-        st.download_button(
-            "下载内容",
-            data=result["content"],
-            file_name=f"{result['brief'].product_name}_{result['brief'].content_type}.txt",
-            mime="text/plain",
-            use_container_width=True,
-        )
-        with st.expander("查看审核结果与参考案例"):
-            st.caption(
-                f"生成来源：{result.get('drafter_source', '内容生成 Agent')}；"
-                f"审核来源：{result.get('reviewer_source', '审核 Agent')}；"
-                f"参考来源：{result.get('retrieval_source', '参考库')}"
-            )
-            for name, detail in result["scorecard"].items():
-                st.progress(detail["score"] / 10, text=f"{name}: {detail['score']}/10")
-                st.caption(detail["issue"])
-            st.markdown("**参考案例**")
-            for index, case in enumerate(result["cases"], start=1):
-                st.write(f"{index}. {case['title']} · 匹配度 {case['score']}")
+    render_output_panel(result)
 
 if st.session_state.history:
     with st.expander("历史记录", expanded=False):
