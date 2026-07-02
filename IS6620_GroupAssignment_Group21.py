@@ -890,19 +890,10 @@ with setting_col3:
 with setting_col4:
     structure = st.selectbox("内容结构", ["痛点-卖点-CTA", "AIDA", "PAS", "对比型", "清单型"], index=0)
 
-guard_col1, guard_col2, guard_col3, guard_col4 = st.columns([1, 1, 1.25, 2.25])
-with guard_col1:
-    include_title = st.checkbox("生成标题", value=True)
-with guard_col2:
-    include_cta = st.checkbox("包含 CTA", value=True)
-with guard_col3:
-    compliance_check = st.checkbox(
-        "合规审核",
-        value=True,
-        help="检查竞品词、绝对化/夸大表达、无法证明承诺，以及 EDM 退订提示。",
-    )
-with guard_col4:
-    avoid_terms = st.text_input("避免出现的词", value="Cherry, Keychron, Razer")
+include_title = True
+include_cta = True
+compliance_check = True
+avoid_terms = st.text_input("避免出现的词", value="Cherry, Keychron, Razer")
 
 st.divider()
 
